@@ -1,0 +1,781 @@
+const express = require("express");
+const router = express.Router();
+var budjet = require("../models/budjet");
+var ligne_budjet = require("../models/ligne_budjet");
+var user_sujet = require("../models/user_sujet");
+var groupe = require("../models/groupe");
+var ligne_groupe = require("../models/ligne_groupe");
+var user = require("../models/user");
+const auth = require("../middlewares/passport");
+var notif = require("../models/notification");
+var Sequelize = require("sequelize");
+var configuration = require("../config");
+const forecast = require("../models/forecast");
+const sequelize = new Sequelize(
+  configuration.connection.base,
+  configuration.connection.root,
+  configuration.connection.password,
+  {
+    host: configuration.connection.host,
+    port: configuration.connection.port,
+    dialect: "mysql",
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    },
+    operatorsAliases: false,
+  }
+);
+
+
+router.post("/saveGroup", (req, res) => {
+  var annee = req.body.annee;
+  var titre = req.body.titre;
+  var user = req.body.user;
+  groupe
+    .create({
+      annee:annee,
+      titre: titre,
+      type:0,
+    })
+    .then((e) => {
+      var idS =[]
+      user.forEach((element) => {
+        idS.push(element.value)
+        ligne_groupe.create({
+          id_user_sujet:element.value,
+          id_groupe:e.id,
+        });
+      });
+      ligne_budjet.sum("total", {
+        include: {
+          model: budjet,
+          as: "budjets",
+          where: { id_user_sujet: idS },
+        },
+      }).then(val=>{
+        groupe
+          .update(
+            {
+              total: val,
+            },
+            { where: { id: e.id } }
+          )
+          .then((r2) => {
+            return res.status(200).send(true);
+          });
+      });
+      
+    })
+    .catch((error) => {
+      return res.status(403).send(false);
+    });
+  
+});
+router.post("/getGroupeBudget", auth, async (req, res) => {
+  var annee = req.body.annee;
+  ligne_groupe
+    .findAll({ 
+      group:["id_groupe"] ,
+      attributes: [
+        [sequelize.fn("GROUP_CONCAT", sequelize.col("id_user_sujet")), "users"],
+      ],
+      include:{
+        model:groupe,
+        where: {annee:annee,type:0,etat:1}, 
+        as:"groupes"
+      },
+      order: [["id_groupe", "desc"]],
+      
+    })
+    .then(function (r) {
+      return res.status(200).send(r);
+    });
+});
+/* deleteGroupe */
+router.delete("/deleteGroupe/:id", auth, (req, res) => {
+  var id = req.params.id;
+  groupe.findOne({ where: { id: id } }).then(function (r1) {
+    if (!r1) {
+      return res.status(403).send(false);
+    } else {
+      ligne_groupe.destroy({ where: { id_groupe: id } })
+        .then((r2) => {
+          forecast
+            .destroy({
+              where: { id_groupe: id } 
+            })
+            .then(function async() {
+              groupe.destroy({ where: { id: id } });
+              return res.status(200).send(true);
+            });
+          /* groupe.destroy({ where: { id: id } })
+          return res.status(200).send(true); */
+        })
+        .catch((error) => {
+          return res.status(403).send(false);
+        });
+    }
+  });
+});
+// Desplay all lignes of client ...
+router.put("/updateBudjet/:id", auth, (req, res) => {
+  //ligne budjet
+  var id = req.params.id;
+  var entities = req.body.entities;
+  budjet.findOne({ where: { id: id } }).then(function (r1) {
+    if (!r1) {
+      return res.status(403).send(false);
+    } else {
+      for (const key in entities) {
+        const element = entities[key];
+        for (const key1 in element) {
+          var element1 = element[key1];
+          var jan = element1.jan;
+          var feb = element1.feb;
+          var mars = element1.mars;
+          var q1 = element1.q1;
+          var apr = element1.apr;
+          var mai = element1.mai;
+          var juin = element1.juin;
+          var q2 = element1.q2;
+          var july = element1.july;
+          var aug = element1.aug;
+          var sep = element1.sep;
+          var q3 = element1.q3;
+          var oct = element1.oct;
+          var nov = element1.nov;
+          var dec = element1.dec;
+          var q4 = element1.q4;
+          var total = element1.total;
+          var idLigne = element1.id;
+          var commentaire = element1.commentaire;
+          var anneePrec = element1.anneePrec;
+          ligne_budjet
+            .update(
+              {
+                jan: jan,
+                feb: feb,
+                mars: mars,
+                q1: q1,
+                apr: apr,
+                mai: mai,
+                juin: juin,
+                q2: q2,
+                july: july,
+                aug: aug,
+                sep: sep,
+                q3: q3,
+                oct: oct,
+                nov: nov,
+                dec: dec,
+                q4: q4,
+                total:total,
+                commentaire:commentaire,
+                anneePrec:anneePrec
+              },
+              { where: { id: idLigne } }
+            )
+        }
+      }
+      return res.status(200).send(true);
+    }
+  });
+});
+router.put("/updateBudjetExcel/:id", auth, (req, res) => {
+  //ligne budjet
+  var id = req.params.id;
+  var entities = req.body.insert;
+  budjet.findOne({ where: { id: id } }).then(function (r1) {
+    if (!r1) {
+      return res.status(403).send(false);
+    } else {
+      entities.forEach(element1=>{
+        var jan = element1.jan;
+        var feb = element1.feb;
+        var mars = element1.mars;
+        var q1 = element1.q1;
+        var apr = element1.apr;
+        var mai = element1.mai;
+        var juin = element1.juin;
+        var q2 = element1.q2;
+        var july = element1.july;
+        var aug = element1.aug;
+        var sep = element1.sep;
+        var q3 = element1.q3;
+        var oct = element1.oct;
+        var nov = element1.nov;
+        var dec = element1.dec;
+        var q4 = element1.q4;
+        var total = element1.total;
+        var idLigne = element1.id_arbo;
+        var commentaire = element1.commentaire;
+        var anneePrec = element1.anneePrec;
+        ligne_budjet
+          .update(
+            {
+              jan: jan,
+              feb: feb,
+              mars: mars,
+              q1: q1,
+              apr: apr,
+              mai: mai,
+              juin: juin,
+              q2: q2,
+              july: july,
+              aug: aug,
+              sep: sep,
+              q3: q3,
+              oct: oct,
+              nov: nov,
+              dec: dec,
+              q4: q4,
+              total:total,
+              commentaire:commentaire,
+              anneePrec:anneePrec
+            },
+            { where: { id_arborecence: idLigne ,id_budjet:id} }
+          )
+
+      })
+      return res.status(200).send(true);
+    }
+  });
+});
+/* router.put("/updateBudjetExcel/:id", auth, (req, res) => {
+    //ligne budjet
+    var id = req.params.id;
+    var entities = req.body.insert;
+    budjet.findOne({ where: { id: id } }).then(function (r1) {
+      if (!r1) {
+        return res.status(403).send(false);
+      } else {
+        entities.forEach(element1=>{
+          var jan = element1.jan.indexOf(",")!=-1?element1.jan.replace(",","."):element1.jan;
+          var feb = element1.feb.indexOf(",")!=-1?element1.feb.replace(",","."):element1.feb;
+          var mars = element1.mars.indexOf(",")!=-1?element1.mars.replace(",","."):element1.mars;
+          var q1 = element1.q1.indexOf(",")!=-1?element1.q1.replace(",","."):element1.q1;
+          var apr = element1.apr.indexOf(",")!=-1?element1.apr.replace(",","."):element1.apr;
+          var mai = element1.mai.indexOf(",")!=-1?element1.mai.replace(",","."):element1.mai;
+          var juin = element1.juin.indexOf(",")!=-1?element1.juin.replace(",","."):element1.juin;
+          var q2 = element1.q2.indexOf(",")!=-1?element1.jan.replace(",","."):element1.jan;
+          var july = element1.july.indexOf(",")!=-1?element1.july.replace(",","."):element1.july;
+          var aug = element1.aug.indexOf(",")!=-1?element1.aug.replace(",","."):element1.aug;
+          var sep = element1.sep.indexOf(",")!=-1?element1.sep.replace(",","."):element1.sep;
+          var q3 = element1.q3.indexOf(",")!=-1?element1.q3.replace(",","."):element1.q3;
+          var oct = element1.oct.indexOf(",")!=-1?element1.oct.replace(",","."):element1.oct;
+          var nov = element1.nov.indexOf(",")!=-1?element1.nov.replace(",","."):element1.nov;
+          var dec = element1.dec.indexOf(",")!=-1?element1.dec.replace(",","."):element1.dec;
+          var q4 = element1.q4.indexOf(",")!=-1?element1.q4.replace(",","."):element1.q4;
+          var total = element1.total.indexOf(",")!=-1?element1.total.replace(",","."):element1.total;
+          var idLigne = element1.id_arbo;
+          var commentaire = element1.commentaire;
+          var anneePrec = element1.anneePrec.indexOf(",")!=-1?element1.anneePrec.replace(",","."):element1.anneePrec;
+          ligne_budjet
+            .update(
+              {
+                jan: parseFloat(jan),
+                feb: parseFloat(feb),
+                mars: parseFloat(mars),
+                q1: parseFloat(q1),
+                apr: parseFloat(apr),
+                mai: parseFloat(mai),
+                juin: parseFloat(juin),
+                q2: parseFloat(q2),
+                july: parseFloat(july),
+                aug: parseFloat(aug),
+                sep: parseFloat(sep),
+                q3: parseFloat(q3),
+                oct: parseFloat(oct),
+                nov: parseFloat(nov),
+                dec: parseFloat(dec),
+                q4: parseFloat(q4),
+                total:parseFloat(total),
+                commentaire:commentaire,
+                anneePrec:parseFloat(anneePrec)
+              },
+              { where: { id_arborecence: idLigne ,id_budjet:id} }
+            )
+  
+        })       
+        return res.status(200).send(true);
+      }
+    });
+  }); */
+router.get("/getDetailBudjet/:idBudjet/:idRole/:idUserSujet", auth, async (req, res) => {
+  var idBudjet = req.params.idBudjet;
+  var idRole = req.params.idRole;
+  var idUserSujet = req.params.idUserSujet;
+  var where = parseInt(idRole) !=1 ?{ id_budjet: idBudjet }:{};
+  var whereUserSujet = parseInt(idRole) ==1 ?{ id_user_sujet: idUserSujet }:{};
+  var findLigne = await ligne_budjet.findAll({
+    where: where,
+    include: [
+      {
+        model:budjet,
+        as:"budjets",
+        where: whereUserSujet,
+      },
+      "sujets", 
+      "arborecences"
+    ],
+  });
+  var obj = new Object();
+  findLigne.forEach(e=>{
+    if(!obj[e.dataValues.id_sujet]){
+      obj[e.dataValues.id_sujet] = [];
+      obj[e.dataValues.id_sujet].push(e.dataValues);
+    }
+    else 
+      obj[e.dataValues.id_sujet].push(e.dataValues);
+  })
+  return res.status(200).json(obj);
+});
+router.get("/getBudjetByUserSujet/:idUserSujet", auth, async (req, res) => {
+  var idUserSujet = req.params.idUserSujet;
+  var findLigne = await ligne_budjet.findAll({
+    include: [
+      {
+        model:budjet,
+        as:"budjets",
+        where: { id_user_sujet: idUserSujet },
+      },
+      "sujets", 
+      "arborecences"
+    ],
+  });
+  var obj = new Object();
+  findLigne.forEach(e=>{
+    if(!obj[e.dataValues.id_sujet]){
+      obj[e.dataValues.id_sujet] = [];
+      obj[e.dataValues.id_sujet].push(e.dataValues);
+    }
+    else 
+      obj[e.dataValues.id_sujet].push(e.dataValues);
+  })
+  return res.status(200).json(obj);
+});
+router.get("/getDetailGroupe/:idGroupe/:annee", auth, async (req, res) => {
+  var idGroupe = req.params.idGroupe;
+  var annee = req.params.annee;
+  ligne_groupe
+    .findOne({ 
+      group:["id_groupe"] ,
+      attributes: [
+        [sequelize.fn("GROUP_CONCAT", sequelize.col("id_user_sujet")), "users"],
+        "id_groupe"
+      ],
+      where: {id_groupe:idGroupe}, 
+      order: [["id_groupe", "desc"]],
+      
+    })
+    .then(async function (r) {
+      var arrayUser=r.dataValues.users.split(",") ;
+      ligne_budjet.findAll({
+        include: [
+          {
+            model:budjet,
+            as:"budjets",
+            where: {id_user_sujet:arrayUser,annee:annee},
+          },
+          "sujets", 
+          "arborecences"
+        ],
+      }).then(val=>{
+        var obj = new Object();
+        val.forEach(e=>{
+          if(!obj[e.dataValues.id_sujet]){
+            obj[e.dataValues.id_sujet] = [];
+            obj[e.dataValues.id_sujet].push(e.dataValues);
+          }
+          else 
+            obj[e.dataValues.id_sujet].push(e.dataValues);
+        })
+        return res.status(200).json(obj);
+
+      });
+    });
+});
+router.post("/exportExcel", auth, async (req, res) => {
+  var idUserSujet = req.body.idUserSujet;
+  var idUsers = req.body.idUsers;
+  var annee = req.body.annee;
+  var where = { id_user_sujet: idUserSujet,annee:annee};
+  /* var whereUser = idUsers != 0 ?{ id_user: idUsers,etat:2,annee:annee }:{etat:2,annee:annee};  */
+  var whereUser = idUsers != 0 ?{ id_user: idUsers,annee:annee }:{annee:annee}; 
+  var findLigne = await ligne_budjet.findAll({
+    include: [
+      {
+        model:budjet,
+        as:"budjets",
+        where: where,
+        include:{
+          model:user_sujet,
+          as:"user_sujets",
+          where: whereUser,
+        }
+      },
+      "sujets",  
+      "arborecences"
+    ],
+  });
+  var obj = new Object();
+  findLigne.forEach(e=>{
+    if(!obj[e.dataValues.id_sujet]){
+      obj[e.dataValues.id_sujet] = [];
+    }
+    obj[e.dataValues.id_sujet].push({
+      sujet:e.dataValues.sujets.num+" : "+e.dataValues.sujets.sujet,
+      arborecence:e.dataValues.arborecences.num+" : "+e.dataValues.arborecences.description,
+      titre:e.dataValues.budjets.user_sujets.titre,
+      Janvier: e.dataValues.jan,
+      Fevrier: e.dataValues.feb,
+      Mars: e.dataValues.mars,
+      Q1: e.dataValues.q1,
+      Avril: e.dataValues.apr,
+      Mai: e.dataValues.mai,
+      Juin: e.dataValues.juin,
+      Q2: e.dataValues.q2,
+      Juillet: e.dataValues.july,
+      Aout: e.dataValues.aug,
+      Septembre: e.dataValues.sep,
+      Q3: e.dataValues.q3,
+      Octobre: e.dataValues.oct,
+      Novembre: e.dataValues.nov,
+      Decembre: e.dataValues.dec,
+      Q4: e.dataValues.q4,
+      Total:e.dataValues.total,
+    });
+  })
+  return res.status(200).json(obj);
+});
+router.post("/exportExcelUser", auth, async (req, res) => {
+  var idUsers = req.body.idUsers;
+  var annee = req.body.annee;
+  var id = req.body.id;
+  var where = { annee:annee,id:id ,id_equipe:idUsers};
+  var whereUser = { annee:annee } 
+  var findLigne = await ligne_budjet.findAll({
+    include: [
+      {
+        model:budjet,
+        as:"budjets",
+        where: where,
+        include:{
+          model:user_sujet,
+          as:"user_sujets",
+          where: whereUser,
+        }
+      },
+      "sujets",  
+      "arborecences"
+    ],
+  });
+  var obj = new Object();
+  findLigne.forEach(e=>{
+    if(!obj[e.dataValues.id_sujet]){
+      obj[e.dataValues.id_sujet] = [];
+    }
+    obj[e.dataValues.id_sujet].push({
+      sujet:e.dataValues.sujets.num+" : "+e.dataValues.sujets.sujet,
+      num:e.dataValues.arborecences.num,
+      description:e.dataValues.arborecences.description,
+      titre:e.dataValues.budjets.user_sujets.titre,
+      commentaire:e.dataValues.commentaire,
+      anneePrec:e.dataValues.anneePrec,
+      Janvier: e.dataValues.jan,
+      Fevrier: e.dataValues.feb,
+      Mars: e.dataValues.mars,
+      Avril: e.dataValues.apr,
+      Mai: e.dataValues.mai,
+      Juin: e.dataValues.juin,
+      Juillet: e.dataValues.july,
+      Aout: e.dataValues.aug,
+      Septembre: e.dataValues.sep,
+      Octobre: e.dataValues.oct,
+      Novembre: e.dataValues.nov,
+      Decembre: e.dataValues.dec,
+    });
+  })
+  return res.status(200).json(obj);
+});
+router.get("/getBudjetUser/:idUser/:idRole/:annee", auth, async (req, res) => {
+  var idUser = req.params.idUser;
+  var idRole = req.params.idRole;
+  var annee = req.params.annee;
+  var whereParent = {annee:annee};
+  var whereFils = {annee:annee};
+  if(idRole!=6){
+    whereParent={id_user:idUser,annee:annee}
+  } else {    
+    whereFils={id_equipe: idUser,annee:annee}
+  }
+  var findBudjet = await budjet.findAll({
+    where: whereFils,
+    include: [
+      {
+        model: user_sujet,
+        as: "user_sujets",
+        where: whereParent
+      },
+      "users"
+    ],order:[["id", "desc"]]
+  });
+  return res.status(200).json(findBudjet);
+});
+router.get("/getBudjetByIdUser/:idUser/:annee", auth, async (req, res) => {
+  var idUser = req.params.idUser;
+  var annee = req.params.annee;
+  var whereParent = {annee:annee};
+  var whereFils={id_equipe: idUser,annee:annee}
+  var findBudjet = await budjet.findAll({
+    where: whereFils,
+    include: [
+      {
+        model: user_sujet,
+        as: "user_sujets",
+        where: whereParent
+      },
+      "users"
+    ],
+  });
+  return res.status(200).json(findBudjet);
+});
+router.post("/allBudjet", auth, (req, res) => {
+  var annee = req.body.annee;
+  budjet
+    .findAll({ where:{annee:annee}, order: [["id","desc"]] })
+    .then(function (r) {
+      return res.status(200).send(r);
+    });
+});
+router.post("/getUser", auth, (req, res) => {
+  var id = req.headers["id"];
+  budjet.findOne({ where: { id: id } }).then(function (u1) {
+    if (!u1) {
+      return res.status(403).send(false);
+    } else {
+      return res.status(200).json(u1.dataValues);
+    }
+  });
+});
+router.put("/changeEtat/:id", auth, async(req, res) => {
+  var findAdmin= await user.findOne({where:{id_role:1}});
+  var id = req.params.id;
+  var etat = req.body.etat;
+  var id_equipe = req.body.idEquipe;
+  var note = req.body.note;
+  var idRole = req.body.idRole;
+  var idBudget = req.body.idBudget;
+  var total = req.body.total;
+  if(parseInt(idRole) !=1)
+    budjet.findOne({ where: { id:idBudget,id_user_sujet: id,id_equipe:id_equipe },include:["user_sujets"] }).then(function (u) {
+      if (!u) {
+        return res.status(403).send(false);
+      } else { 
+        budjet
+          .update(
+            {
+              etat: etat,
+              note:note
+            },
+            { where: { id: u.dataValues.id } }
+          )
+          .then((r2) => { 
+            var txt ="Vérification budget";
+            if(etat == 1){
+              notif.create({
+                id_user: u.dataValues.user_sujets.id_user,
+                text: txt,
+                etat:3
+              });
+            } else {
+              txt = (parseInt(idRole) <= 5 && etat == 2)?"Budget valider":"Budjet refuser";
+              etatNotif = (parseInt(idRole) <= 5 && etat == 2)?4:5;
+              notif.create({
+                id_user: id_equipe,
+                text: txt,
+                etat:etatNotif
+              });
+     
+            }
+            budjet.findAll({ where: { id_user_sujet: id,etat:2 }}).then(r=>{
+              budjet.count({ where: { id_user_sujet: id }}).then(c=>{
+                if(r.length == c){
+                  notif.create({
+                    id_user: findAdmin.dataValues.id,
+                    text: "Vérification budget",
+                    etat:6
+                  });
+                  user_sujet.update({
+                    etat:1,
+                    note:null,
+                    refuser:0
+                  },{ where: { id: id }});
+                }
+              })
+            })
+            return res.status(200).send(true);
+          })
+          .catch((error) => {
+            return res.status(403).send(error);
+          });
+      }
+    });
+  else 
+    user_sujet.findOne({ where: { id: id } }).then(function (u) {
+      if (!u) {
+        return res.status(403).send(false);
+      } else {
+        if(etat == 3){
+          notif.create({
+            id_user: u.dataValues.id_user,
+            text: "Budget valider",
+            etat:7
+          });
+          budjet
+            .update(
+              {
+                etat: 3,
+              },
+              { where: { id_user_sujet: id } }
+          )
+          ligne_budjet.sum("total", {
+            include: {
+              model: budjet,
+              as: "budjets",
+              where: { id_user_sujet: id },
+            },
+          }).then(val=>{
+            user_sujet.update({
+              etat:2,
+              total:val
+            },{ where: { id: id } }).then(()=>{
+               ligne_groupe.findOne({ where: { id_user_sujet: id }}).then(g=>{             
+              groupe.update({
+                total:parseFloat(total+g.dataValues.total),
+                etat:1
+              },{ where: { id:g.dataValues.id_groupe ,id_groupeb:u.dataValues.id_groupe}}); 
+ 
+            })
+            })                   
+             
+          
+          })
+        }
+        else {
+          notif.create({
+            id_user: u.dataValues.id,
+            text: "Budget refuser",
+            etat:8
+          });
+          user_sujet.update({
+            note:note,
+            etat:3
+          },{ where: { id: id }});
+          budjet
+            .update(
+              {
+                etat: 1,
+              },
+              { where: { id_user_sujet: id } }
+          )
+        }
+        return res.status(200).send(true);
+      }
+    })
+});
+
+router.post("/getBudjet", auth, (req, res) => {
+  var id = req.headers["id"];
+  budjet
+    .findOne({ where: { id: id },include:["user_sujets"] })
+    .then(function (r1) {
+      if (!r1) {
+        return res.status(403).send(false);
+      } else {
+        return res.status(200).json(r1.dataValues);
+      }
+    });
+});
+
+router.get("/getLigneGroup/:id", auth, async (req, res) => {
+  var id = req.params.id;
+  var findLigne = await ligne_groupe.findAll({ where: { id_groupe: id },include:["groupes","user_sujets","sells"] });
+  var array = [];
+  /* findLigne.forEach(e=>{ */
+  for (const key in findLigne) {
+    const e = findLigne[key];
+    var titre ="";
+    var annee ="";
+    var total ="";
+    var id = 0;
+    var forecasts = await forecast.findOne({
+      where: { id_user_sujet: e.id_user_sujet },
+    });
+    var valForecasts = 0;
+    var valActual = 0;
+    if(forecasts != null){
+      valForecasts = forecasts.forecast;
+      valActual = forecasts.actual;
+
+    }
+    if(e.dataValues.sells){
+      var titre = e.dataValues.sells.titre;
+      var annee = e.dataValues.sells.annee;
+      var total = e.dataValues.sells.total;
+      var id = e.dataValues.sells.id;
+    } else {
+      var titre = e.dataValues.user_sujets.titre;
+      var annee = e.dataValues.user_sujets.annee;
+      var total = e.dataValues.user_sujets.total;
+      var id = e.dataValues.user_sujets.id;
+    }
+    array.push({
+      id:id,
+      titre:titre,
+      annee:annee,
+      total:total,
+      actual: valActual,
+      forecast: valForecasts,
+    })
+  }
+  return res.status(200).json(array);
+  /* ligne_groupe
+    .findAll({ where: { id_groupe: id },include:["groupes","user_sujets","sells"] })
+    .then(function (r1) {
+      if (!r1) {
+        return res.status(403).send(false);
+      } else {
+        var array = [];
+        r1.forEach(e=>{
+          var titre ="";
+          var annee ="";
+          var total ="";
+          var id = 0;
+          if(e.dataValues.sells){
+            var titre = e.dataValues.sells.titre;
+            var annee = e.dataValues.sells.annee;
+            var total = e.dataValues.sells.total;
+            var id = e.dataValues.sells.id;
+          } else {
+            var titre = e.dataValues.user_sujets.titre;
+            var annee = e.dataValues.user_sujets.annee;
+            var total = e.dataValues.user_sujets.total;
+            var id = e.dataValues.user_sujets.id;
+          }
+          array.push({
+            id:id,
+            titre:titre,
+            annee:annee,
+            total:total,
+          })
+        })
+        return res.status(200).json(array);
+      }
+    }); */
+});
+
+module.exports = router;
